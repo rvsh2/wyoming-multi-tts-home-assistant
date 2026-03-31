@@ -105,3 +105,49 @@ def test_http_endpoints(tmp_path):
             assert engine.last_options == {"seed": 4321}
 
     asyncio.run(run_test())
+
+
+def test_openai_audio_speech_endpoint_returns_wav_bytes(tmp_path):
+    engine = LoadedFakeEngine()
+    manager = EngineManager({"fake": engine}, SessionStateStore(tmp_path / "session.json"))
+    app = create_http_app(manager)
+
+    async def run_test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/audio/speech",
+                json={
+                    "model": "gpt-4o-mini-tts",
+                    "input": "hej",
+                    "voice": "default",
+                },
+            )
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "audio/wav"
+            assert response.headers["x-tts-engine-id"] == "fake"
+            assert response.content == b"RIFF1234"
+
+    asyncio.run(run_test())
+
+
+def test_openai_audio_speech_endpoint_rejects_unsupported_format(tmp_path):
+    engine = LoadedFakeEngine()
+    manager = EngineManager({"fake": engine}, SessionStateStore(tmp_path / "session.json"))
+    app = create_http_app(manager)
+
+    async def run_test():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/audio/speech",
+                json={
+                    "model": "gpt-4o-mini-tts",
+                    "input": "hej",
+                    "response_format": "mp3",
+                },
+            )
+            assert response.status_code == 400
+            assert "Unsupported response_format" in response.json()["detail"]
+
+    asyncio.run(run_test())

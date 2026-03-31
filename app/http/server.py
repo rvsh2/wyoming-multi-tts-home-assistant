@@ -6,13 +6,13 @@ import base64
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.engines.base import EngineError, EngineNotLoadedError
 from app.engines.manager import EngineManager
 
-from .models import ActivateEngineRequest, EngineOptionsRequest, SelectEngineRequest, SynthesizeRequest
+from .models import ActivateEngineRequest, EngineOptionsRequest, OpenAiSpeechRequest, SelectEngineRequest, SynthesizeRequest
 
 
 def _json_response(payload) -> JSONResponse:
@@ -31,6 +31,31 @@ def _synthesis_payload(result) -> dict:
     payload = result.asdict()
     payload["wav_base64"] = base64.b64encode(result.wav_audio).decode("ascii")
     return payload
+
+
+def _audio_response(result, response_format: str) -> Response:
+    normalized_format = response_format.strip().lower()
+    if normalized_format == "wav":
+        media_type = "audio/wav"
+        audio_bytes = result.wav_audio
+    elif normalized_format == "pcm":
+        media_type = "application/octet-stream"
+        audio_bytes = result.pcm_audio
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported response_format '{response_format}'. Supported formats: wav, pcm",
+        )
+    return Response(
+        content=audio_bytes,
+        media_type=media_type,
+        headers={
+            "X-TTS-Engine-Id": result.engine_id,
+            "X-TTS-Voice": result.voice,
+            "X-TTS-Language": result.language,
+            "X-TTS-Backend": result.backend,
+        },
+    )
 
 
 def create_http_app(manager: EngineManager) -> FastAPI:
@@ -110,5 +135,26 @@ def create_http_app(manager: EngineManager) -> FastAPI:
             raise _server_error(err) from err
 
         return _json_response(_synthesis_payload(result))
+
+    @app.post("/v1/audio/speech")
+    async def openai_audio_speech(request: OpenAiSpeechRequest):
+        del request.model
+        del request.speed
+        try:
+            result = await manager.synthesize(
+                text=request.input,
+                voice=request.voice,
+                language=None,
+                options=None,
+            )
+        except EngineNotLoadedError as err:
+            raise HTTPException(status_code=409, detail=str(err)) from err
+        except EngineError as err:
+            raise _bad_request(err) from err
+        except HTTPException:
+            raise
+        except Exception as err:  # pragma: no cover - runtime dependent
+            raise _server_error(err) from err
+        return _audio_response(result, request.response_format)
 
     return app

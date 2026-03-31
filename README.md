@@ -65,6 +65,33 @@ docker compose up -d --build
 
 Only one engine stays loaded at a time. When you switch engines, the previous one is unloaded to save VRAM. The last loaded engine is persisted and auto-loaded again after restart.
 
+## OpenAI-Compatible TTS Endpoint
+
+The HTTP server also exposes an OpenAI-style speech endpoint on port `8280`:
+
+- `POST /v1/audio/speech`
+
+Example:
+
+```bash
+curl -X POST http://YOUR_HOST:8280/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini-tts",
+    "input": "This is a speech synthesis test.",
+    "voice": "default",
+    "response_format": "wav"
+  }' \
+  --output speech.wav
+```
+
+Current behavior:
+
+- The endpoint uses the currently active engine from the control panel / Wyoming manager.
+- Supported `response_format` values are `wav` and `pcm`.
+- `model` is currently accepted for client compatibility but ignored by the server.
+- `speed` is currently accepted for client compatibility but ignored by the server.
+
 ## Persistent Data
 
 The compose file stores runtime data in:

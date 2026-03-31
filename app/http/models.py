@@ -22,3 +22,11 @@ class SynthesizeRequest(BaseModel):
     voice: str | None = None
     language: str | None = None
     options: dict | None = None
+
+
+class OpenAiSpeechRequest(BaseModel):
+    model: str = Field(min_length=1)
+    input: str = Field(min_length=1)
+    voice: str | None = None
+    response_format: str = "wav"
+    speed: float | None = None
