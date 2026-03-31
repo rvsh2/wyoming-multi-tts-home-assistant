@@ -1,15 +1,6 @@
 # wyoming-multi-tts for Home Assistant
 
-Multi-engine TTS server for Home Assistant built on Wyoming Protocol, with a web control panel on port `8280`.
-
-## What It Does
-
-- Exposes one Wyoming TTS endpoint on port `10210`
-- Lets you switch the active engine from the web UI
-- Loads engines manually from the UI and remembers the last loaded engine across restarts
-- Unloads the previous engine when switching to save VRAM
-- Uses GPU first and falls back to CPU when needed
-- Tracks synthesis timing for quick comparisons
+Multi-engine TTS server for Home Assistant using Wyoming Protocol. It exposes one Wyoming endpoint on port `10210` and a web control panel on port `8280` for loading, switching, and testing engines.
 
 ## Included Engines
 
@@ -25,108 +16,92 @@ Multi-engine TTS server for Home Assistant built on Wyoming Protocol, with a web
 - Linux host with Docker and Docker Compose
 - NVIDIA GPU recommended
 - CPU-only mode also works as a fallback, but it is much slower
-- NVIDIA Container Toolkit installed on the host
-- CUDA 12.6 compatible driver on the host
-- Hugging Face token in `.env`
-- External Docker network named `bridge-network`, or another name passed as `DOCKER_NETWORK`
+- NVIDIA Container Toolkit
+- CUDA 12.6 compatible NVIDIA driver on the host
+- Hugging Face token
+- External Docker network, by default `bridge-network`
 
 ## Quick Start
 
-1. Copy the environment template:
+1. Create `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Put your Hugging Face token in `.env`:
+2. Edit `.env`:
 
 ```env
 HF_TOKEN=your_huggingface_token
 DOCKER_NETWORK=bridge-network
 ```
 
-3. Create the external Docker network once:
+3. Create the Docker network once:
 
 ```bash
 docker network create bridge-network
 ```
 
-4. Build and start the service:
+4. Build and start:
 
 ```bash
 docker compose up -d --build
 ```
 
-5. Open the UI:
+5. Open:
 
 - Web UI: `http://YOUR_HOST:8280`
-- Wyoming TTS: `tcp://YOUR_HOST:10210`
+- Wyoming: `tcp://YOUR_HOST:10210`
+
+## Using It
+
+1. Open the web UI
+2. Click `Load` on the engine you want to use
+3. Wait for `ready`
+4. Optionally test synthesis in the UI
+5. In Home Assistant, add the Wyoming integration and point it to port `10210`
+
+Only one engine stays loaded at a time. When you switch engines, the previous one is unloaded to save VRAM. The last loaded engine is persisted and auto-loaded again after restart.
 
 ## Persistent Data
 
-The compose file uses project-relative bind mounts, so the following folders are preserved between rebuilds:
+The compose file stores runtime data in:
 
 - `./data/hf-cache`
 - `./data/state`
 - `./data/speakers`
 
-## How To Use
+## Useful Commands
 
-1. Open the web UI on port `8280`
-2. Click `Load` on the engine you want to use
-3. Wait for `ready`
-4. Optionally test synthesis from the UI
-5. Add the Wyoming integration in Home Assistant and point it to port `10210`
-
-The active engine and last successful loaded state are persisted. After a container restart, the same engine is auto-loaded again.
-
-## Rebuild Notes
-
-- Normal rebuild:
+Rebuild:
 
 ```bash
 docker compose up -d --build
 ```
 
-- Full test suite:
+Run tests:
 
 ```bash
 ./.venv/bin/pytest -q
 ```
 
-- Local syntax check:
+Compile check:
 
 ```bash
 python3 -m compileall app tests
 ```
 
-## Optional: Prebuild `flash-attn` Wheel
-
-`Qwen3-TTS` can reuse a local prebuilt `flash-attn` wheel to avoid a long source build.
+Optional: prebuild a local `flash-attn` wheel for `Qwen3-TTS`:
 
 ```bash
 ./scripts/build_flash_attn_wheel.sh
 ```
 
-This writes a compatible wheel into `wheelhouse/`. Docker will reuse it automatically on the next build.
-
-## Notes For Another Computer
-
-To run this project on another machine, make sure all of the following are true:
-
-- `.env` exists and contains `HF_TOKEN`
-- the external Docker network exists
-- NVIDIA Container Toolkit is installed if you want GPU mode
-- ports `8280` and `10210` are available
-- the host GPU driver is compatible with CUDA 12.6
-
-If no usable GPU is available, engines may still fall back to CPU, but latency will be much worse and some engines may be impractical.
-
 ## License
 
 This repository's code is released under the MIT license. See [LICENSE](./LICENSE).
 
-Downloaded models and third-party runtimes keep their own licenses. Important ones used by this project include:
+Models and third-party runtimes keep their own licenses:
 
 - `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice`: Apache-2.0  
   https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice
@@ -136,9 +111,9 @@ Downloaded models and third-party runtimes keep their own licenses. Important on
   https://huggingface.co/facebook/mms-tts-pol
 - `coqui/XTTS-v2`: Coqui Public Model License  
   https://huggingface.co/coqui/XTTS-v2
-- `fishaudio/s2-pro`: check the upstream model page before commercial use  
-  https://huggingface.co/fishaudio/s2-pro
-- `WhisperSpeech`: check the upstream project and model artifacts you deploy  
+- `WhisperSpeech`: MIT  
   https://github.com/WhisperSpeech/WhisperSpeech
+- `fishaudio/s2-pro`: Fish Audio Research License, commercial use requires a separate license from Fish Audio  
+  https://huggingface.co/fishaudio/s2-pro
 
-Because the engine set mixes permissive and restricted model licenses, commercial use depends on which engine you enable and which weights you download.
+Commercial use depends on which engine and model weights you enable. In particular, `facebook/mms-tts-pol` is non-commercial under CC-BY-NC-4.0, and `fishaudio/s2-pro` requires a separate commercial license from Fish Audio.
