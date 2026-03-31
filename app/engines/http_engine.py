@@ -96,8 +96,15 @@ class HttpEngine(TtsEngine):
     def status(self) -> EngineStatus:
         if self._process is None:
             return self._cached_status
-        payload = self._request("GET", "/status")
-        self._cached_status = EngineStatus.fromdict(payload["status"])
+        try:
+            payload = self._request("GET", "/status")
+            self._cached_status = EngineStatus.fromdict(payload["status"])
+        except EngineError as err:
+            if self._process.poll() is None:
+                self._cached_status = self._status_during_runner_transition(err)
+                return self._cached_status
+            self._stop_process()
+            raise
         return self._cached_status
 
     def synthesize(
@@ -129,6 +136,7 @@ class HttpEngine(TtsEngine):
             return self._process
         self._port = self._resolve_port()
         python_path = self._resolve_python()
+        self._cached_status = self._status_during_runner_transition()
         env = os.environ.copy()
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = self._log_path.open("a+", encoding="utf-8")
@@ -230,6 +238,28 @@ class HttpEngine(TtsEngine):
         if response_payload.get("ok"):
             return response_payload
         self._raise_http_error(response_payload)
+
+    def _status_during_runner_transition(self, err: EngineError | None = None) -> EngineStatus:
+        payload = self._cached_status.asdict()
+        if self._cached_status.loaded:
+            payload.update(
+                {
+                    "state": "error",
+                    "loaded": False,
+                    "loading": False,
+                }
+            )
+        else:
+            payload.update(
+                {
+                    "state": "loading",
+                    "loaded": False,
+                    "loading": True,
+                }
+            )
+        if err is not None:
+            payload["last_error"] = str(err)
+        return EngineStatus.fromdict(payload)
 
     def _raise_http_error(self, payload: dict[str, Any]) -> None:
         error_type = str(payload.get("error_type", "EngineError"))

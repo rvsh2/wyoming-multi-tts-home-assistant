@@ -41,6 +41,7 @@ esac
 
 mkdir -p /tmp/uv-cache
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
+export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
 export UV_EXTRA_INDEX_URL="${UV_EXTRA_INDEX_URL:-https://download.pytorch.org/whl/cu126}"
 FLASH_ATTN_WHEEL_DIR="${FLASH_ATTN_WHEEL_DIR:-/app/wheelhouse}"
 

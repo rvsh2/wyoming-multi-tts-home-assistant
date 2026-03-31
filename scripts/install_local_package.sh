@@ -6,6 +6,8 @@ if [[ ! -d "/app" ]]; then
   exit 1
 fi
 
+export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
+
 VENV_PATHS=(
   "/app/.venv"
   "/app/.venv-chatterbox"

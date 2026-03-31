@@ -2,6 +2,7 @@ FROM nvidia/cuda:12.6.2-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV UV_LINK_MODE=copy
 
 RUN apt-get update && apt-get install -y \
     build-essential \

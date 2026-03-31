@@ -44,3 +44,26 @@ def test_http_engine_lifecycle(monkeypatch):
 
     engine.unload()
     assert engine.status().loaded is False
+
+
+class _FakeProcess:
+    def poll(self):
+        return None
+
+
+def test_http_engine_status_reports_loading_during_runner_startup():
+    engine = build_fake_http_engine()
+    engine._process = _FakeProcess()
+    engine._port = 19091
+
+    def failing_request(method, path, payload=None, *, timeout=None):
+        raise EngineError("Fake HTTP HTTP runner request failed: [Errno 111] Connection refused")
+
+    engine._request = failing_request
+
+    status = engine.status()
+
+    assert status.state == "loading"
+    assert status.loading is True
+    assert status.loaded is False
+    assert "Connection refused" in (status.last_error or "")

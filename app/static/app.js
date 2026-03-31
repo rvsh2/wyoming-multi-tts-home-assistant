@@ -296,6 +296,7 @@ function renderEngineOptions() {
   const showOptions = hasEngineOptions();
   elements.engineOptionsPanel.hidden = !showOptions;
   if (!showOptions) {
+    elements.engineOptionsFields.innerHTML = "";
     return;
   }
 
@@ -449,17 +450,23 @@ async function selectAndLoadEngine(engine) {
 }
 
 async function loadStatus() {
-  const [status, engines, voices, health] = await Promise.all([
+  const [statusResult, enginesResult, voicesResult, healthResult] = await Promise.allSettled([
     request("/api/status"),
     request("/api/engines"),
     request("/api/voices"),
     request("/health"),
   ]);
 
-  state.engines = engines.engines;
-  state.voices = voices.voices;
-  renderStatus(status);
-  renderHealth(health);
+  if (statusResult.status !== "fulfilled") {
+    throw statusResult.reason;
+  }
+
+  state.engines = enginesResult.status === "fulfilled" ? enginesResult.value.engines : [];
+  state.voices = voicesResult.status === "fulfilled" ? voicesResult.value.voices : [];
+  renderStatus(statusResult.value);
+  if (healthResult.status === "fulfilled") {
+    renderHealth(healthResult.value);
+  }
   renderEngineList();
   renderVoices();
 }
