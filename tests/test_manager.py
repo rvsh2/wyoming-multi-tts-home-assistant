@@ -8,9 +8,11 @@ from app.state.session_state import SessionState, SessionStateStore
 
 
 class FakeEngine(TtsEngine):
-    def __init__(self, engine_id: str) -> None:
+    def __init__(self, engine_id: str, runtime_options: dict | None = None) -> None:
         self._engine_id = engine_id
         self._loaded = False
+        self._runtime_options = runtime_options or {}
+        self.last_options: dict | None = None
 
     def engine_id(self) -> str:
         return self._engine_id
@@ -42,9 +44,11 @@ class FakeEngine(TtsEngine):
             loaded=self._loaded,
             device="cpu",
             available_voices=self.list_voices(),
+            extra={"runtime_options": self._runtime_options},
         )
 
     def synthesize(self, text: str, *, voice: str | None, language: str | None, options: dict | None = None) -> EngineSynthesisResult:
+        self.last_options = dict(options or {})
         return EngineSynthesisResult(
             engine_id=self._engine_id,
             voice=voice or "default",
@@ -161,3 +165,37 @@ def test_manager_keeps_last_voice_and_language_per_engine(tmp_path):
     assert restored.selection_for("b") == ("voice-b", "en")
     assert restored.last_voice == "voice-b"
     assert restored.last_language == "en"
+
+
+def test_manager_persists_engine_options_and_merges_them_into_synthesis(tmp_path):
+    runtime_options = {
+        "seed": {"type": "integer", "default": 777, "min": 0},
+        "latency": {"type": "select", "default": "balanced", "choices": ["normal", "balanced"]},
+        "normalize": {"type": "boolean", "default": True},
+        "chunk_length": {"type": "integer", "default": 200, "min": 100, "max": 400},
+    }
+    engine = FakeEngine("fish_s2_pro", runtime_options=runtime_options)
+    store = SessionStateStore(tmp_path / "session.json")
+    manager = EngineManager({"fish_s2_pro": engine}, store)
+
+    asyncio.run(
+        manager.set_active_engine_options(
+            {
+                "seed": 1234,
+                "latency": "normal",
+                "chunk_length": 240,
+                "normalize": False,
+            }
+        )
+    )
+    asyncio.run(manager.synthesize(text="x", voice="default", language="pl"))
+
+    restored = store.load(default_engine_id="fish_s2_pro")
+    assert restored.engine_options["fish_s2_pro"]["seed"] == 1234
+    assert restored.engine_options["fish_s2_pro"]["latency"] == "normal"
+    assert engine.last_options == {
+        "seed": 1234,
+        "latency": "normal",
+        "chunk_length": 240,
+        "normalize": False,
+    }

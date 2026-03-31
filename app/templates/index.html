@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>wyoming-multi-tts</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v=20260331-engine-options">
 </head>
 <body>
   <main class="page">
@@ -79,6 +79,15 @@
             <textarea id="text-input" rows="5">This is a speech synthesis test for Home Assistant.</textarea>
           </label>
           <div class="hint-box" id="voice-summary">Load an engine to populate voices and languages.</div>
+          <section id="engine-options-panel" class="engine-options-panel" hidden>
+            <div class="card-header compact options-header">
+              <div>
+                <h3 id="engine-options-title">Engine Options</h3>
+              </div>
+              <span id="engine-options-subtitle" class="summary-subvalue">Persisted and reused for Wyoming requests</span>
+            </div>
+            <div id="engine-options-fields" class="field-grid options-grid"></div>
+          </section>
           <div class="button-row actions">
             <button id="synthesize-button" type="submit">Generate Speech</button>
           </div>
@@ -96,6 +105,6 @@
       </article>
     </section>
   </main>
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v=20260331-engine-options" defer></script>
 </body>
 </html>

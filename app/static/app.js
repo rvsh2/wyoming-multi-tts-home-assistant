@@ -7,10 +7,13 @@ const state = {
   currentHealth: null,
   engines: [],
   voices: [],
+  engineOptions: {},
+  runtimeOptions: {},
   pollHandle: null,
   pendingEngineId: null,
   selectedVoiceId: null,
   selectedLanguage: null,
+  updatingEngineOptions: false,
 };
 
 const elements = {
@@ -27,6 +30,10 @@ const elements = {
   voiceSelect: document.getElementById("voice-select"),
   languageSelect: document.getElementById("language-select"),
   voiceSummary: document.getElementById("voice-summary"),
+  engineOptionsPanel: document.getElementById("engine-options-panel"),
+  engineOptionsTitle: document.getElementById("engine-options-title"),
+  engineOptionsSubtitle: document.getElementById("engine-options-subtitle"),
+  engineOptionsFields: document.getElementById("engine-options-fields"),
   synthesizeForm: document.getElementById("synthesize-form"),
   synthesizeButton: document.getElementById("synthesize-button"),
   textInput: document.getElementById("text-input"),
@@ -66,6 +73,85 @@ function formatMs(value) {
 function updateActionStatus(message, variant = "neutral") {
   elements.actionStatus.textContent = message;
   elements.actionStatus.dataset.variant = variant;
+}
+
+function activeRuntimeOptions() {
+  return state.runtimeOptions || {};
+}
+
+function optionSpec(optionName) {
+  return activeRuntimeOptions()[optionName] || {};
+}
+
+function optionDefault(optionName, fallback = null) {
+  const spec = optionSpec(optionName);
+  return Object.prototype.hasOwnProperty.call(spec, "default") ? spec.default : fallback;
+}
+
+function activeEngineDisplayName() {
+  return state.currentStatus?.display_name || "Engine";
+}
+
+function hasEngineOptions() {
+  return Object.keys(activeRuntimeOptions()).length > 0;
+}
+
+function renderSelectOptions(select, choices, selectedValue) {
+  select.innerHTML = "";
+  for (const choice of choices) {
+    const option = document.createElement("option");
+    option.value = choice;
+    option.textContent = choice;
+    select.appendChild(option);
+  }
+  if (choices.includes(selectedValue)) {
+    select.value = selectedValue;
+    return;
+  }
+  if (choices.length > 0) {
+    select.value = choices[0];
+  }
+}
+
+function collectEngineOptionsFromInputs() {
+  if (!elements.engineOptionsFields) {
+    return {};
+  }
+  const collected = {};
+  for (const field of elements.engineOptionsFields.querySelectorAll("[data-option-name]")) {
+    const optionName = field.dataset.optionName;
+    const optionType = field.dataset.optionType;
+    if (!optionName) {
+      continue;
+    }
+    if (optionType === "boolean") {
+      collected[optionName] = field.checked;
+      continue;
+    }
+    collected[optionName] = field.value;
+  }
+  return collected;
+}
+
+async function saveEngineOptions() {
+  if (!hasEngineOptions() || !elements.engineOptionsFields) {
+    return;
+  }
+  try {
+    updateActionStatus(`Saving ${activeEngineDisplayName()} options.`, "neutral");
+    const status = await request("/api/engines/options", {
+      method: "POST",
+      body: JSON.stringify({ options: collectEngineOptionsFromInputs() }),
+    });
+    state.engineOptions = status.engine_options || {};
+    state.runtimeOptions = status.runtime_options || {};
+    renderEngineOptions();
+    updateActionStatus(`${activeEngineDisplayName()} options saved.`, "success");
+  } catch (error) {
+    updateActionStatus(error.message, "error");
+  } finally {
+    schedulePolling();
+  }
 }
 
 function isEngineBusy() {
@@ -152,9 +238,97 @@ function renderVoices() {
   elements.voiceSummary.textContent = languageNote || `${state.voices.length} voice(s) exposed by the active engine.`;
 }
 
+function createOptionControl(optionName, optionSpec, value) {
+  const label = document.createElement("label");
+  const labelText = document.createElement("span");
+  labelText.textContent = optionSpec.label || optionName;
+  label.appendChild(labelText);
+
+  let field;
+  if (optionSpec.type === "select") {
+    field = document.createElement("select");
+    renderSelectOptions(field, optionSpec.choices || [], String(value ?? optionSpec.default ?? ""));
+  } else if (optionSpec.type === "boolean") {
+    label.className = "checkbox-field";
+    field = document.createElement("input");
+    field.type = "checkbox";
+    field.checked = Boolean(value);
+    label.appendChild(field);
+    field.dataset.optionName = optionName;
+    field.dataset.optionType = optionSpec.type || "boolean";
+    return label;
+  } else if (optionSpec.type === "integer") {
+    field = document.createElement("input");
+    field.type = "number";
+    field.step = "1";
+    field.inputMode = "numeric";
+    if (optionSpec.min !== undefined) {
+      field.min = String(optionSpec.min);
+    }
+    if (optionSpec.max !== undefined) {
+      field.max = String(optionSpec.max);
+    }
+    field.value = value ?? optionSpec.default ?? "";
+  } else {
+    field = document.createElement("input");
+    field.type = "text";
+    field.value = value ?? optionSpec.default ?? "";
+    if (optionSpec.placeholder) {
+      field.placeholder = optionSpec.placeholder;
+    }
+  }
+
+  field.dataset.optionName = optionName;
+  field.dataset.optionType = optionSpec.type || "string";
+  label.appendChild(field);
+  return label;
+}
+
+function renderEngineOptions() {
+  if (
+    !elements.engineOptionsPanel
+    || !elements.engineOptionsTitle
+    || !elements.engineOptionsSubtitle
+    || !elements.engineOptionsFields
+  ) {
+    return;
+  }
+  const showOptions = hasEngineOptions();
+  elements.engineOptionsPanel.hidden = !showOptions;
+  if (!showOptions) {
+    return;
+  }
+
+  const runtimeOptions = activeRuntimeOptions();
+  const resolvedOptions = { ...state.engineOptions };
+  elements.engineOptionsTitle.textContent = `${activeEngineDisplayName()} Options`;
+  elements.engineOptionsSubtitle.textContent = "Persisted and reused for Wyoming requests";
+  elements.engineOptionsFields.innerHTML = "";
+
+  state.updatingEngineOptions = true;
+  for (const [optionName, optionSpec] of Object.entries(runtimeOptions)) {
+    const fallbackValue = optionDefault(optionName, "");
+    const control = createOptionControl(
+      optionName,
+      optionSpec,
+      optionName in resolvedOptions ? resolvedOptions[optionName] : fallbackValue,
+    );
+    if (optionSpec.description) {
+      const description = document.createElement("span");
+      description.className = "field-description";
+      description.textContent = optionSpec.description;
+      control.appendChild(description);
+    }
+    elements.engineOptionsFields.appendChild(control);
+  }
+  state.updatingEngineOptions = false;
+}
+
 function renderStatus(status) {
   state.currentStatus = status;
   state.activeEngineId = status.active_engine_id;
+  state.engineOptions = status.engine_options || {};
+  state.runtimeOptions = status.runtime_options || {};
   elements.stateBadge.textContent = status.state;
   elements.stateBadge.dataset.state = status.state;
   elements.statusDevice.textContent = status.device || "-";
@@ -164,6 +338,7 @@ function renderStatus(status) {
 
   const ready = status.loaded && status.state === "ready";
   elements.synthesizeButton.disabled = !ready;
+  renderEngineOptions();
 
   if (state.pendingEngineId && state.pendingEngineId === status.active_engine_id && ready) {
     state.pendingEngineId = null;
@@ -336,6 +511,15 @@ elements.voiceSelect.addEventListener("change", () => {
 elements.languageSelect.addEventListener("change", () => {
   state.selectedLanguage = elements.languageSelect.value || null;
 });
+
+if (elements.engineOptionsFields) {
+  elements.engineOptionsFields.addEventListener("change", () => {
+    if (state.updatingEngineOptions) {
+      return;
+    }
+    saveEngineOptions();
+  });
+}
 
 elements.synthesizeForm.addEventListener("submit", async (event) => {
   event.preventDefault();

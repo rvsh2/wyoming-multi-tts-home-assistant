@@ -11,6 +11,9 @@ from app.state.session_state import SessionStateStore
 
 
 class LoadedFakeEngine(TtsEngine):
+    def __init__(self) -> None:
+        self.last_options: dict | None = None
+
     def engine_id(self) -> str:
         return "fake"
 
@@ -40,9 +43,15 @@ class LoadedFakeEngine(TtsEngine):
             loaded=True,
             device="cpu",
             available_voices=self.list_voices(),
+            extra={
+                "runtime_options": {
+                    "seed": {"type": "integer", "default": 777, "min": 0},
+                }
+            },
         )
 
     def synthesize(self, text: str, *, voice: str | None, language: str | None, options: dict | None = None) -> EngineSynthesisResult:
+        self.last_options = dict(options or {})
         return EngineSynthesisResult(
             engine_id="fake",
             voice=voice or "default",
@@ -69,7 +78,8 @@ class LoadedFakeEngine(TtsEngine):
 
 
 def test_http_endpoints(tmp_path):
-    manager = EngineManager({"fake": LoadedFakeEngine()}, SessionStateStore(tmp_path / "session.json"))
+    engine = LoadedFakeEngine()
+    manager = EngineManager({"fake": engine}, SessionStateStore(tmp_path / "session.json"))
     app = create_http_app(manager)
 
     async def run_test():
@@ -78,6 +88,12 @@ def test_http_endpoints(tmp_path):
             assert (await client.get("/health")).status_code == 200
             assert (await client.get("/api/engines")).status_code == 200
             assert (await client.post("/api/engines/activate", json={"engine_id": "fake"})).status_code == 200
+            options_response = await client.post(
+                "/api/engines/options",
+                json={"options": {"seed": 4321}},
+            )
+            assert options_response.status_code == 200
+            assert options_response.json()["engine_options"]["seed"] == 4321
             response = await client.post(
                 "/api/synthesize",
                 json={"text": "hej", "voice": "default", "language": "pl"},
@@ -86,5 +102,6 @@ def test_http_endpoints(tmp_path):
             payload = response.json()
             assert payload["engine_id"] == "fake"
             assert payload["metrics"]["synthesis_time_ms"] == 8.0
+            assert engine.last_options == {"seed": 4321}
 
     asyncio.run(run_test())

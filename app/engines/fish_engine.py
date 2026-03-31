@@ -45,6 +45,11 @@ MODEL_ALLOW_PATTERNS = [
     "README.md",
 ]
 
+FISH_DEFAULT_SEED = int(os.getenv("FISH_DEFAULT_SEED", "777"))
+FISH_DEFAULT_LATENCY = os.getenv("FISH_DEFAULT_LATENCY", "balanced")
+FISH_DEFAULT_NORMALIZE = os.getenv("FISH_DEFAULT_NORMALIZE", "true").lower() != "false"
+FISH_DEFAULT_CHUNK_LENGTH = int(os.getenv("FISH_DEFAULT_CHUNK_LENGTH", "200"))
+
 
 class FishS2ProEngine(TtsEngine):
     def __init__(self, model_id: str | None = None) -> None:
@@ -143,6 +148,7 @@ class FishS2ProEngine(TtsEngine):
                 "server_url": self._server_url,
                 "compile_enabled": self._compile_enabled,
                 "supports_language_control": False,
+                "runtime_options": self._runtime_options(),
             },
         )
 
@@ -158,17 +164,18 @@ class FishS2ProEngine(TtsEngine):
             raise EngineNotLoadedError("Fish S2 Pro engine is not loaded")
 
         resolved_voice = voice or "default"
+        resolved_options = self._resolved_options(options)
         payload: dict[str, Any] = {
             "text": text.strip(),
             "format": "wav",
-            "latency": str((options or {}).get("latency", "balanced")),
+            "latency": str(resolved_options["latency"]),
             "streaming": False,
-            "normalize": bool((options or {}).get("normalize", True)),
-            "chunk_length": int((options or {}).get("chunk_length", 200)),
+            "normalize": bool(resolved_options["normalize"]),
+            "chunk_length": int(resolved_options["chunk_length"]),
         }
         if resolved_voice != "default":
             payload["reference_id"] = resolved_voice
-        seed = (options or {}).get("seed")
+        seed = resolved_options.get("seed")
         if seed is not None:
             payload["seed"] = int(seed)
 
@@ -200,6 +207,49 @@ class FishS2ProEngine(TtsEngine):
 
     def health_payload(self) -> dict[str, Any]:
         return self.status().asdict()
+
+    def _runtime_options(self) -> dict[str, dict[str, Any]]:
+        return {
+            "seed": {
+                "type": "integer",
+                "label": "Seed",
+                "default": FISH_DEFAULT_SEED,
+                "min": 0,
+                "description": "Keeps Fish voice generation more stable between requests.",
+            },
+            "latency": {
+                "type": "select",
+                "label": "Latency",
+                "default": FISH_DEFAULT_LATENCY,
+                "choices": ["normal", "balanced"],
+                "description": "Balanced is safer, normal can favor lower latency.",
+            },
+            "normalize": {
+                "type": "boolean",
+                "label": "Normalize",
+                "default": FISH_DEFAULT_NORMALIZE,
+                "description": "Normalize loudness before returning WAV output.",
+            },
+            "chunk_length": {
+                "type": "integer",
+                "label": "Chunk length",
+                "default": FISH_DEFAULT_CHUNK_LENGTH,
+                "min": 100,
+                "max": 400,
+                "description": "Longer chunks can sound smoother but may increase latency.",
+            },
+        }
+
+    def _resolved_options(self, options: dict[str, Any] | None) -> dict[str, Any]:
+        resolved = {
+            option_name: option_spec.get("default")
+            for option_name, option_spec in self._runtime_options().items()
+        }
+        for option_name, option_value in (options or {}).items():
+            if option_value in (None, "") or option_name not in resolved:
+                continue
+            resolved[option_name] = option_value
+        return resolved
 
     def _load_server(self, device: str) -> bool:
         model_source = self._resolve_model_source()

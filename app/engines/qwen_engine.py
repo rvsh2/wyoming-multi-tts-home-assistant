@@ -165,6 +165,15 @@ class QwenTtsEngine(TtsEngine):
                 "model_id": self.model_id,
                 "backend_supported_languages": self._backend_supported_languages,
                 "wyoming_program_name": "qwen_tts",
+                "runtime_options": {
+                    "instruct": {
+                        "type": "string",
+                        "label": "Instruction",
+                        "default": "",
+                        "placeholder": "Optional speaking style or delivery hint",
+                        "description": "Optional style prompt passed to Qwen3-TTS.",
+                    }
+                },
                 "language_note": (
                     "Official Qwen3-TTS supports Chinese, English, Japanese, Korean, German, "
                     "French, Russian, Portuguese, Spanish, and Italian. Polish is not supported."

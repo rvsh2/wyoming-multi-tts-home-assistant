@@ -118,6 +118,88 @@ class EngineManager:
             "memory_hint": self._engine_memory_hint(engine, status.device),
         }
 
+    def _engine_runtime_options(self, engine: TtsEngine) -> dict[str, dict[str, Any]]:
+        runtime_options = engine.status().extra.get("runtime_options", {})
+        if not isinstance(runtime_options, dict):
+            return {}
+        return {
+            str(option_name): dict(option_spec)
+            for option_name, option_spec in runtime_options.items()
+            if isinstance(option_spec, dict)
+        }
+
+    def _engine_option_defaults(self, engine: TtsEngine) -> dict[str, Any]:
+        defaults: dict[str, Any] = {}
+        for option_name, option_spec in self._engine_runtime_options(engine).items():
+            if "default" in option_spec:
+                defaults[option_name] = option_spec["default"]
+        return defaults
+
+    def _persisted_engine_options(self, engine_id: str) -> dict[str, Any]:
+        persisted = self.session.engine_options.get(engine_id, {})
+        if not isinstance(persisted, dict):
+            return {}
+        return dict(persisted)
+
+    def _resolved_engine_options(self, engine: TtsEngine) -> dict[str, Any]:
+        resolved = self._engine_option_defaults(engine)
+        resolved.update(self._persisted_engine_options(engine.engine_id()))
+        return resolved
+
+    @staticmethod
+    def _coerce_engine_option_value(option_name: str, option_spec: dict[str, Any], value: Any) -> Any:
+        option_type = option_spec.get("type")
+        if option_type == "boolean":
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in {"false", "0", "off", "no", ""}:
+                    return False
+                if normalized in {"true", "1", "on", "yes"}:
+                    return True
+            return bool(value)
+        if option_type == "integer":
+            if value in (None, ""):
+                return option_spec.get("default")
+            try:
+                coerced = int(value)
+            except (TypeError, ValueError) as err:
+                raise EngineError(f"Invalid integer value for '{option_name}'") from err
+            minimum = option_spec.get("min")
+            maximum = option_spec.get("max")
+            if minimum is not None and coerced < int(minimum):
+                raise EngineError(f"Value for '{option_name}' must be >= {minimum}")
+            if maximum is not None and coerced > int(maximum):
+                raise EngineError(f"Value for '{option_name}' must be <= {maximum}")
+            return coerced
+        if option_type == "select":
+            choices = [str(choice) for choice in option_spec.get("choices", [])]
+            coerced = str(value) if value is not None else str(option_spec.get("default", ""))
+            if choices and coerced not in choices:
+                raise EngineError(f"Invalid value for '{option_name}'")
+            return coerced
+        if option_type == "string":
+            if value is None:
+                return str(option_spec.get("default", ""))
+            return str(value)
+        return value
+
+    def _sanitize_engine_options(self, engine: TtsEngine, options: dict[str, Any]) -> dict[str, Any]:
+        runtime_options = self._engine_runtime_options(engine)
+        if not runtime_options:
+            if options:
+                raise EngineError(f"{engine.display_name()} does not expose configurable runtime options")
+            return {}
+        sanitized: dict[str, Any] = {}
+        for option_name, option_spec in runtime_options.items():
+            if option_name not in options:
+                continue
+            sanitized[option_name] = self._coerce_engine_option_value(
+                option_name,
+                option_spec,
+                options[option_name],
+            )
+        return sanitized
+
     def list_engines(self) -> list[dict[str, Any]]:
         prefer_gpu = resource_usage_payload(self.active_engine.status().device).get("kind") == "vram"
         return [
@@ -140,6 +222,8 @@ class EngineManager:
         payload["last_language"] = self.session.last_language
         payload["autoload_active_engine"] = self.session.autoload_active_engine
         payload["active_engine_loaded"] = self.session.active_engine_loaded
+        payload["engine_options"] = self._resolved_engine_options(self.active_engine)
+        payload["runtime_options"] = self._engine_runtime_options(self.active_engine)
         payload["selected"] = True
         payload["ready"] = bool(payload["loaded"]) and payload["state"] == "ready"
         return payload
@@ -162,6 +246,7 @@ class EngineManager:
             "available_voices": [voice.id for voice in active_voices],
             "last_voice": self.session.last_voice,
             "last_language": self.session.last_language,
+            "engine_options": self._resolved_engine_options(self.active_engine),
             "engines": [self._health_engine_entry(engine) for engine in self.registry.values()],
         }
 
@@ -224,6 +309,14 @@ class EngineManager:
             self._save_session()
             return self.active_status()
 
+    async def set_active_engine_options(self, options: dict[str, Any]) -> dict[str, Any]:
+        async with self.locked():
+            engine = self.active_engine
+            sanitized = self._sanitize_engine_options(engine, options)
+            self.session.engine_options[self.session.active_engine_id] = sanitized
+            self._save_session()
+            return self.active_status()
+
     def autoload_active_engine_sync(self) -> dict[str, Any] | None:
         with self._state_lock:
             if not self.should_autoload():
@@ -269,12 +362,15 @@ class EngineManager:
         async with self.locked():
             started = time.perf_counter()
             engine = self.active_engine
+            merged_options = self._resolved_engine_options(engine)
+            if options:
+                merged_options.update(self._sanitize_engine_options(engine, options))
             result = await self._run_blocking(
                 lambda: engine.synthesize(
                     text,
                     voice=voice,
                     language=language,
-                    options=options,
+                    options=merged_options or None,
                 )
             )
             result.metrics.end_to_end_time_ms = round((time.perf_counter() - started) * 1000.0, 2)

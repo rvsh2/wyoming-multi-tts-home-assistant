@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.engines.base import EngineError, EngineNotLoadedError
 from app.engines.manager import EngineManager
 
-from .models import ActivateEngineRequest, SelectEngineRequest, SynthesizeRequest
+from .models import ActivateEngineRequest, EngineOptionsRequest, SelectEngineRequest, SynthesizeRequest
 
 
 def _json_response(payload) -> JSONResponse:
@@ -68,6 +68,13 @@ def create_http_app(manager: EngineManager) -> FastAPI:
     async def api_activate_engine(request: ActivateEngineRequest):
         try:
             return _json_response(await manager.activate_engine(request.engine_id))
+        except EngineError as err:
+            raise _bad_request(err) from err
+
+    @app.post("/api/engines/options")
+    async def api_engine_options(request: EngineOptionsRequest):
+        try:
+            return _json_response(await manager.set_active_engine_options(request.options))
         except EngineError as err:
             raise _bad_request(err) from err
 

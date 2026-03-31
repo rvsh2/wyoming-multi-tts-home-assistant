@@ -8,28 +8,28 @@ from typing import Any
 
 ENGINE_MEMORY_HINTS: dict[str, dict[str, str]] = {
     "chatterbox": {
-        "gpu": "~4-6 GiB VRAM",
-        "cpu": "~6-8 GiB RAM",
+        "gpu": "Observed ~3-4 GiB VRAM",
+        "cpu": "CPU fallback, expect high RAM usage",
     },
     "whisperspeech": {
-        "gpu": "~3-5 GiB VRAM",
-        "cpu": "~5-7 GiB RAM",
+        "gpu": "Observed ~3-4 GiB VRAM",
+        "cpu": "CPU fallback, expect high RAM usage",
     },
     "xtts_v2": {
-        "gpu": "~5-8 GiB VRAM",
-        "cpu": "~7-10 GiB RAM",
+        "gpu": "Observed ~2-3 GiB VRAM",
+        "cpu": "CPU fallback, expect high RAM usage",
     },
     "qwen_tts_polish": {
-        "gpu": "~6-10 GiB VRAM",
-        "cpu": "~10-16 GiB RAM",
+        "gpu": "Observed ~2-3 GiB VRAM",
+        "cpu": "CPU fallback, expect high RAM usage",
     },
     "mms_tts_pol": {
-        "gpu": "~1-2 GiB VRAM",
-        "cpu": "~2-4 GiB RAM",
+        "gpu": "Observed <1 GiB VRAM",
+        "cpu": "Low RAM footprint on CPU",
     },
     "fish_s2_pro": {
-        "gpu": "~12-18 GiB VRAM",
-        "cpu": "~14-22 GiB RAM",
+        "gpu": "Observed ~18-20 GiB VRAM",
+        "cpu": "CPU fallback, expect very high RAM usage",
     },
 }
 

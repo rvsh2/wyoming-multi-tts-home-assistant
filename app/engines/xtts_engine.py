@@ -141,7 +141,17 @@ class XttsEngine(TtsEngine):
             last_error=self._last_error,
             supports_streaming=True,
             voices=self.list_voices(),
-            extra={"model_name": self.model_name},
+            extra={
+                "model_name": self.model_name,
+                "runtime_options": {
+                    "split_sentences": {
+                        "type": "boolean",
+                        "label": "Split Sentences",
+                        "default": True,
+                        "description": "Split long text into sentences before synthesis for safer generation.",
+                    }
+                },
+            },
         )
 
     def synthesize(self, text: str, *, voice: str | None, language: str | None, options: dict[str, Any] | None = None):
@@ -152,13 +162,14 @@ class XttsEngine(TtsEngine):
         builtin_voice = resolved_voice if resolved_voice in self._builtin_voices else None
         profile = None if builtin_voice else self.speaker_store.get_profile(resolved_voice)
         speaker_wav = SpeakerStore.wav_paths(profile)
+        split_sentences = True if options is None else bool(options.get("split_sentences", True))
         started = time.perf_counter()
         audio = self._tts.synthesizer.tts(
             text=text.strip(),
             speaker_name=builtin_voice,
             language_name=resolved_language,
             speaker_wav=speaker_wav,
-            split_sentences=True,
+            split_sentences=split_sentences,
         )
         if hasattr(audio, "tolist"):
             audio = audio.tolist()

@@ -35,6 +35,7 @@ body {
 }
 
 button,
+input,
 select,
 textarea {
   font: inherit;
@@ -87,7 +88,8 @@ code {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
 }
 
@@ -164,6 +166,33 @@ h2 {
 .form {
   display: grid;
   gap: 10px;
+}
+
+.engine-options-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.engine-options-panel[hidden] {
+  display: none;
+}
+
+.options-header {
+  margin-bottom: 0;
+}
+
+.options-grid {
+  align-items: end;
+}
+
+.field-description {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .empty-state {
@@ -260,6 +289,40 @@ button {
   cursor: pointer;
   color: var(--text);
   background: linear-gradient(135deg, rgba(98, 195, 186, 0.16), rgba(98, 195, 186, 0.09));
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  padding: 0.72rem 0.78rem;
+  background: rgba(6, 14, 20, 0.9);
+  color: var(--text);
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.92rem;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0.72rem 0.78rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: rgba(6, 14, 20, 0.9);
+}
+
+.checkbox-field input {
+  width: auto;
+  margin: 0;
 }
 
 button:hover:not(:disabled) {

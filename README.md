@@ -2,6 +2,8 @@
 
 Multi-engine TTS server for Home Assistant using Wyoming Protocol. It exposes one Wyoming endpoint on port `10210` and a web control panel on port `8280` for loading, switching, and testing engines.
 
+![Web UI screenshot](./docs/ui-screenshot.png)
+
 ## Included Engines
 
 - `Chatterbox`
